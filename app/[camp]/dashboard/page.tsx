@@ -20,7 +20,13 @@ interface Camp {
   sharedWith?: string[];
 }
 
-export default function CampDashboard({ params }: { params: { camp: string } }) {
+interface PageProps {
+  params: {
+    camp: string;
+  };
+}
+
+export default function CampDashboard({ params }: PageProps) {
   const router = useRouter();
   const [campName, setCampName] = useState('');
   const [campDescription, setCampDescription] = useState('');
