@@ -38,9 +38,12 @@ interface Camp {
 }
 
 interface Room {
+  id: string;
   campId: string;
   capacity: number;
-  workers?: Worker[];
+  workers: Worker[];
+  project: string;
+  number: string;
 }
 
 interface Worker {
@@ -48,6 +51,8 @@ interface Worker {
   name: string;
   surname: string;
   registrationNumber: string;
+  project: string;
+  entryDate: string;
 }
 
 interface Stats {
@@ -113,7 +118,6 @@ type ExcelRow = (string | number | Cell)[];
 type ExcelData = ExcelRow[];
 
 export default function ReportPage() {
-  const params = useParams();
   const router = useRouter();
   const [rooms, setRooms] = useState<Room[]>([]);
   const [stats, setStats] = useState<Stats>({

@@ -11,7 +11,6 @@ export default function RoomsPage() {
   const [filteredRooms, setFilteredRooms] = useState<Room[]>([]);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [selectedRoom, setSelectedRoom] = useState<Room | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [campName, setCampName] = useState('');
@@ -36,12 +35,9 @@ export default function RoomsPage() {
 
   const [selectedWorker, setSelectedWorker] = useState<Worker | null>(null);
   const [showEditWorkerModal, setShowEditWorkerModal] = useState(false);
-
-  const [showMenu, setShowMenu] = useState<string | null>(null);
   const [showChangeRoomModal, setShowChangeRoomModal] = useState(false);
   const [selectedRoomForChange, setSelectedRoomForChange] = useState('');
   const [currentCamp, setCurrentCamp] = useState<Camp | null>(null);
-  const [currentUser, setCurrentUser] = useState<{ email: string; camps: string[] } | null>(null);
 
   useEffect(() => {
     // Oturum kontrolü
@@ -52,7 +48,6 @@ export default function RoomsPage() {
     }
 
     const user = JSON.parse(userSession);
-    setCurrentUser(user);
 
     // Mevcut kampı kontrol et
     const currentCampData = localStorage.getItem('currentCamp');

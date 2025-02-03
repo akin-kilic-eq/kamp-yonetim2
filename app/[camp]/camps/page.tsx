@@ -251,9 +251,9 @@ export default function CampsPage() {
         <div className="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 max-w-md w-full">
             <h3 className="text-lg font-medium text-gray-900 mb-4">Kamp Sil</h3>
-            <p className="text-sm text-gray-600 mb-4">
-              "{selectedCamp.name}" kampını silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.
-            </p>
+            <div className="text-sm text-gray-500">
+              &quot;{selectedCamp.name}&quot; kampını silmek istediğinize emin misiniz?
+            </div>
             <div className="flex justify-end space-x-3">
               <button
                 onClick={() => {
