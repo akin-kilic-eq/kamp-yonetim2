@@ -1,15 +1,15 @@
 import { NextResponse } from 'next/server';
-import fs from 'fs/promises';
-import path from 'path';
+import clientPromise from '@/lib/mongodb';
+import { ObjectId } from 'mongodb';
 
 // Kamp listesini getir
 export async function GET() {
   try {
-    const filePath = path.join(process.cwd(), 'data', 'camps.json');
-    const fileContent = await fs.readFile(filePath, 'utf-8');
-    const campsData = JSON.parse(fileContent);
+    const client = await clientPromise;
+    const db = client.db('kamp-yonetim');
+    const camps = await db.collection('camps').find({}).toArray();
 
-    return NextResponse.json(campsData);
+    return NextResponse.json({ camps });
   } catch (error) {
     console.error('Kamp listesi getirme hatası:', error);
     return NextResponse.json(
@@ -32,20 +32,18 @@ export async function POST(request: Request) {
       );
     }
 
-    const filePath = path.join(process.cwd(), 'data', 'camps.json');
-    const fileContent = await fs.readFile(filePath, 'utf-8');
-    const campsData = JSON.parse(fileContent);
+    const client = await clientPromise;
+    const db = client.db('kamp-yonetim');
 
     const newCamp = {
-      id: Date.now().toString(),
       name,
       startDate,
       endDate,
       createdAt: new Date().toISOString()
     };
 
-    campsData.camps.push(newCamp);
-    await fs.writeFile(filePath, JSON.stringify(campsData, null, 2));
+    const result = await db.collection('camps').insertOne(newCamp);
+    newCamp._id = result.insertedId;
 
     return NextResponse.json(newCamp, { status: 201 });
   } catch (error) {
@@ -70,30 +68,29 @@ export async function PUT(request: Request) {
       );
     }
 
-    const filePath = path.join(process.cwd(), 'data', 'camps.json');
-    const fileContent = await fs.readFile(filePath, 'utf-8');
-    const campsData = JSON.parse(fileContent);
-
-    const campIndex = campsData.camps.findIndex((c: any) => c.id === id);
-    if (campIndex === -1) {
-      return NextResponse.json(
-        { error: 'Kamp bulunamadı' },
-        { status: 404 }
-      );
-    }
+    const client = await clientPromise;
+    const db = client.db('kamp-yonetim');
 
     const updatedCamp = {
-      ...campsData.camps[campIndex],
       name,
       startDate,
       endDate,
       updatedAt: new Date().toISOString()
     };
 
-    campsData.camps[campIndex] = updatedCamp;
-    await fs.writeFile(filePath, JSON.stringify(campsData, null, 2));
+    const result = await db.collection('camps').updateOne(
+      { _id: new ObjectId(id) },
+      { $set: updatedCamp }
+    );
 
-    return NextResponse.json(updatedCamp);
+    if (result.matchedCount === 0) {
+      return NextResponse.json(
+        { error: 'Kamp bulunamadı' },
+        { status: 404 }
+      );
+    }
+
+    return NextResponse.json({ ...updatedCamp, _id: id });
   } catch (error) {
     console.error('Kamp güncelleme hatası:', error);
     return NextResponse.json(
@@ -116,20 +113,19 @@ export async function DELETE(request: Request) {
       );
     }
 
-    const filePath = path.join(process.cwd(), 'data', 'camps.json');
-    const fileContent = await fs.readFile(filePath, 'utf-8');
-    const campsData = JSON.parse(fileContent);
+    const client = await clientPromise;
+    const db = client.db('kamp-yonetim');
 
-    const campIndex = campsData.camps.findIndex((c: any) => c.id === id);
-    if (campIndex === -1) {
+    const result = await db.collection('camps').deleteOne({
+      _id: new ObjectId(id)
+    });
+
+    if (result.deletedCount === 0) {
       return NextResponse.json(
         { error: 'Kamp bulunamadı' },
         { status: 404 }
       );
     }
-
-    campsData.camps.splice(campIndex, 1);
-    await fs.writeFile(filePath, JSON.stringify(campsData, null, 2));
 
     return NextResponse.json({ success: true });
   } catch (error) {

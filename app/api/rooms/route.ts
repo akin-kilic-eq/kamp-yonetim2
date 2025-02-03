@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
-import fs from 'fs/promises';
-import path from 'path';
+import clientPromise from '@/lib/mongodb';
+import { ObjectId } from 'mongodb';
 
 // Oda listesini getir
 export async function GET(request: Request) {
@@ -15,14 +15,15 @@ export async function GET(request: Request) {
       );
     }
 
-    const filePath = path.join(process.cwd(), 'data', 'rooms.json');
-    const fileContent = await fs.readFile(filePath, 'utf-8');
-    const roomsData = JSON.parse(fileContent);
+    const client = await clientPromise;
+    const db = client.db('kamp-yonetim');
 
     // Belirli bir kampa ait odaları filtrele
-    const campRooms = roomsData.rooms.filter((room: any) => room.campId === campId);
+    const rooms = await db.collection('rooms')
+      .find({ campId: campId })
+      .toArray();
 
-    return NextResponse.json({ rooms: campRooms });
+    return NextResponse.json({ rooms });
   } catch (error) {
     console.error('Oda listesi getirme hatası:', error);
     return NextResponse.json(
@@ -45,14 +46,14 @@ export async function POST(request: Request) {
       );
     }
 
-    const filePath = path.join(process.cwd(), 'data', 'rooms.json');
-    const fileContent = await fs.readFile(filePath, 'utf-8');
-    const roomsData = JSON.parse(fileContent);
+    const client = await clientPromise;
+    const db = client.db('kamp-yonetim');
 
     // Aynı numaralı oda var mı kontrol et
-    const existingRoom = roomsData.rooms.find(
-      (r: any) => r.campId === campId && r.number === number
-    );
+    const existingRoom = await db.collection('rooms').findOne({
+      campId,
+      number
+    });
 
     if (existingRoom) {
       return NextResponse.json(
@@ -62,7 +63,6 @@ export async function POST(request: Request) {
     }
 
     const newRoom = {
-      id: Date.now().toString(),
       campId,
       number,
       capacity,
@@ -71,8 +71,8 @@ export async function POST(request: Request) {
       createdAt: new Date().toISOString()
     };
 
-    roomsData.rooms.push(newRoom);
-    await fs.writeFile(filePath, JSON.stringify(roomsData, null, 2));
+    const result = await db.collection('rooms').insertOne(newRoom);
+    newRoom._id = result.insertedId;
 
     return NextResponse.json(newRoom, { status: 201 });
   } catch (error) {
@@ -97,31 +97,30 @@ export async function PUT(request: Request) {
       );
     }
 
-    const filePath = path.join(process.cwd(), 'data', 'rooms.json');
-    const fileContent = await fs.readFile(filePath, 'utf-8');
-    const roomsData = JSON.parse(fileContent);
+    const client = await clientPromise;
+    const db = client.db('kamp-yonetim');
 
-    const roomIndex = roomsData.rooms.findIndex((r: any) => r.id === id);
-    if (roomIndex === -1) {
+    const updatedRoom = {
+      number,
+      capacity,
+      project,
+      workers: workers || [],
+      updatedAt: new Date().toISOString()
+    };
+
+    const result = await db.collection('rooms').updateOne(
+      { _id: new ObjectId(id) },
+      { $set: updatedRoom }
+    );
+
+    if (result.matchedCount === 0) {
       return NextResponse.json(
         { error: 'Oda bulunamadı' },
         { status: 404 }
       );
     }
 
-    const updatedRoom = {
-      ...roomsData.rooms[roomIndex],
-      number,
-      capacity,
-      project,
-      workers: workers || roomsData.rooms[roomIndex].workers,
-      updatedAt: new Date().toISOString()
-    };
-
-    roomsData.rooms[roomIndex] = updatedRoom;
-    await fs.writeFile(filePath, JSON.stringify(roomsData, null, 2));
-
-    return NextResponse.json(updatedRoom);
+    return NextResponse.json({ ...updatedRoom, _id: id });
   } catch (error) {
     console.error('Oda güncelleme hatası:', error);
     return NextResponse.json(
@@ -144,20 +143,19 @@ export async function DELETE(request: Request) {
       );
     }
 
-    const filePath = path.join(process.cwd(), 'data', 'rooms.json');
-    const fileContent = await fs.readFile(filePath, 'utf-8');
-    const roomsData = JSON.parse(fileContent);
+    const client = await clientPromise;
+    const db = client.db('kamp-yonetim');
 
-    const roomIndex = roomsData.rooms.findIndex((r: any) => r.id === id);
-    if (roomIndex === -1) {
+    const result = await db.collection('rooms').deleteOne({
+      _id: new ObjectId(id)
+    });
+
+    if (result.deletedCount === 0) {
       return NextResponse.json(
         { error: 'Oda bulunamadı' },
         { status: 404 }
       );
     }
-
-    roomsData.rooms.splice(roomIndex, 1);
-    await fs.writeFile(filePath, JSON.stringify(roomsData, null, 2));
 
     return NextResponse.json({ success: true });
   } catch (error) {

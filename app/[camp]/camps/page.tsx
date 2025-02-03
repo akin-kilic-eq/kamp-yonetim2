@@ -6,7 +6,7 @@ import { format } from 'date-fns';
 import { tr } from 'date-fns/locale';
 
 interface Camp {
-  id: string;
+  _id: string;
   name: string;
   startDate: string;
   endDate: string;
@@ -91,7 +91,7 @@ export default function CampsPage() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          id: selectedCamp.id,
+          id: selectedCamp._id,
           ...formData,
         }),
       });
@@ -119,7 +119,7 @@ export default function CampsPage() {
     setIsLoading(true);
 
     try {
-      const response = await fetch(`/api/camps?id=${selectedCamp.id}`, {
+      const response = await fetch(`/api/camps?id=${selectedCamp._id}`, {
         method: 'DELETE',
       });
 
@@ -168,7 +168,7 @@ export default function CampsPage() {
       <div className="bg-white shadow overflow-hidden sm:rounded-md">
         <ul className="divide-y divide-gray-200">
           {camps.map((camp) => (
-            <li key={camp.id}>
+            <li key={camp._id}>
               <div className="px-4 py-4 sm:px-6">
                 <div className="flex items-center justify-between">
                   <div className="flex-1 min-w-0">
@@ -203,7 +203,7 @@ export default function CampsPage() {
                       Sil
                     </button>
                     <button
-                      onClick={() => router.push(`/${camp.id}/rooms`)}
+                      onClick={() => router.push(`/${camp._id}/rooms`)}
                       className="text-green-600 hover:text-green-900"
                     >
                       Odalar
