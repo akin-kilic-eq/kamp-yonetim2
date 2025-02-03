@@ -2,6 +2,17 @@ import { NextResponse } from 'next/server';
 import clientPromise from '@/lib/mongodb';
 import { ObjectId } from 'mongodb';
 
+interface Room {
+  _id?: ObjectId;
+  campId: string;
+  number: string;
+  capacity: number;
+  project?: string;
+  workers: string[];
+  createdAt: string;
+  updatedAt?: string;
+}
+
 // Oda listesini getir
 export async function GET(request: Request) {
   try {
@@ -23,7 +34,13 @@ export async function GET(request: Request) {
       .find({ campId: campId })
       .toArray();
 
-    return NextResponse.json({ rooms });
+    // ObjectId'leri string'e çevir
+    const formattedRooms = rooms.map(room => ({
+      ...room,
+      _id: room._id.toString()
+    }));
+
+    return NextResponse.json({ rooms: formattedRooms });
   } catch (error) {
     console.error('Oda listesi getirme hatası:', error);
     return NextResponse.json(
@@ -62,7 +79,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const newRoom = {
+    const newRoom: Room = {
       campId,
       number,
       capacity,
@@ -72,9 +89,11 @@ export async function POST(request: Request) {
     };
 
     const result = await db.collection('rooms').insertOne(newRoom);
-    newRoom._id = result.insertedId;
-
-    return NextResponse.json(newRoom, { status: 201 });
+    
+    return NextResponse.json({ 
+      ...newRoom, 
+      _id: result.insertedId.toString() 
+    }, { status: 201 });
   } catch (error) {
     console.error('Oda ekleme hatası:', error);
     return NextResponse.json(
@@ -100,7 +119,7 @@ export async function PUT(request: Request) {
     const client = await clientPromise;
     const db = client.db('kamp-yonetim');
 
-    const updatedRoom = {
+    const updatedRoom: Partial<Room> = {
       number,
       capacity,
       project,
@@ -108,19 +127,23 @@ export async function PUT(request: Request) {
       updatedAt: new Date().toISOString()
     };
 
-    const result = await db.collection('rooms').updateOne(
+    const result = await db.collection('rooms').findOneAndUpdate(
       { _id: new ObjectId(id) },
-      { $set: updatedRoom }
+      { $set: updatedRoom },
+      { returnDocument: 'after' }
     );
 
-    if (result.matchedCount === 0) {
+    if (!result.value) {
       return NextResponse.json(
         { error: 'Oda bulunamadı' },
         { status: 404 }
       );
     }
 
-    return NextResponse.json({ ...updatedRoom, _id: id });
+    return NextResponse.json({
+      ...result.value,
+      _id: result.value._id.toString()
+    });
   } catch (error) {
     console.error('Oda güncelleme hatası:', error);
     return NextResponse.json(
@@ -146,11 +169,11 @@ export async function DELETE(request: Request) {
     const client = await clientPromise;
     const db = client.db('kamp-yonetim');
 
-    const result = await db.collection('rooms').deleteOne({
+    const result = await db.collection('rooms').findOneAndDelete({
       _id: new ObjectId(id)
     });
 
-    if (result.deletedCount === 0) {
+    if (!result.value) {
       return NextResponse.json(
         { error: 'Oda bulunamadı' },
         { status: 404 }
