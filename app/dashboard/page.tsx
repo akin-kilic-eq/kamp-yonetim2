@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import Image from 'next/image';
 
 interface Worker {
   id: number;
@@ -331,9 +332,11 @@ export default function DashboardPage() {
           <div className="flex justify-between h-16">
             <div className="flex">
               <div className="flex-shrink-0 flex items-center">
-                <img
+                <Image
                   src="/antteq-logo.png"
                   alt="ANTTEQ Logo"
+                  width={40}
+                  height={40}
                   className="h-8 w-auto"
                 />
               </div>

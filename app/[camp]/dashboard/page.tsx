@@ -42,8 +42,6 @@ interface Worker {
 
 export default function CampDashboard({ params }: PageProps) {
   const router = useRouter();
-  const [campName, setCampName] = useState('');
-  const [campDescription, setCampDescription] = useState('');
   const [stats, setStats] = useState<Stats>({
     totalRooms: 0,
     totalCapacity: 0,
@@ -52,7 +50,6 @@ export default function CampDashboard({ params }: PageProps) {
     totalWorkers: 0,
     occupancyRate: 0
   });
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [currentCamp, setCurrentCamp] = useState<Camp | null>(null);
 
   useEffect(() => {
@@ -64,7 +61,6 @@ export default function CampDashboard({ params }: PageProps) {
     }
 
     const user = JSON.parse(userSession) as User;
-    setCurrentUser(user);
 
     // Mevcut kampı kontrol et
     const currentCampData = localStorage.getItem('currentCamp');
