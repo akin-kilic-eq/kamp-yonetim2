@@ -102,11 +102,6 @@ export default function CampDashboard({ params }: PageProps) {
     });
   }, [router]);
 
-  const handleLogout = () => {
-    sessionStorage.removeItem('currentUser');
-    router.push('/login');
-  };
-
   return (
     <div className="min-h-screen bg-[url('/arka-plan-guncel-2.jpg')] bg-cover bg-center bg-fixed">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">

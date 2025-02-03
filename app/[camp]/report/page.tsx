@@ -13,7 +13,6 @@ import {
   Tooltip,
   Legend
 } from 'chart.js';
-import { Room, Worker } from '../types';
 import { FaChartPie, FaBed, FaUserFriends } from 'react-icons/fa';
 import XLSX from 'xlsx-js-style';
 
@@ -26,6 +25,30 @@ ChartJS.register(
   Tooltip,
   Legend
 );
+
+interface User {
+  email: string;
+}
+
+interface Camp {
+  id: string;
+  name: string;
+  userEmail: string;
+  sharedWith?: string[];
+}
+
+interface Room {
+  campId: string;
+  capacity: number;
+  workers?: Worker[];
+}
+
+interface Worker {
+  id: string;
+  name: string;
+  surname: string;
+  registrationNumber: string;
+}
 
 interface Stats {
   totalRooms: number;
@@ -177,7 +200,7 @@ export default function ReportPage() {
       return;
     }
 
-    const user = JSON.parse(userSession);
+    const user = JSON.parse(userSession) as User;
     setCurrentUser(user);
 
     // Mevcut kampı kontrol et
@@ -187,7 +210,7 @@ export default function ReportPage() {
       return;
     }
 
-    const camp = JSON.parse(currentCampData);
+    const camp = JSON.parse(currentCampData) as Camp;
     
     // Erişim kontrolü - hem kamp sahibi hem de paylaşılan kullanıcılar erişebilir
     const hasAccess = camp.userEmail === user.email || (camp.sharedWith || []).includes(user.email);
@@ -199,7 +222,7 @@ export default function ReportPage() {
     setCurrentCamp(camp);
 
     // Odaları yükle
-    const allRooms = JSON.parse(localStorage.getItem('rooms') || '[]');
+    const allRooms = JSON.parse(localStorage.getItem('rooms') || '[]') as Room[];
     const campRooms = allRooms.filter((room: Room) => room.campId === camp.id);
     setRooms(campRooms);
 
