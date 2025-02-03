@@ -4,6 +4,11 @@
       "email": "admin@antteq.com",
       "password": "123456",
       "name": "Admin"
+    },
+    {
+      "email": "akinkilic518@gmail.com",
+      "password": "123",
+      "name": "Akın Kılıç"
     }
   ]
-} 
+}

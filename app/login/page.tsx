@@ -2,33 +2,43 @@
 
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import usersData from '../../data/users.json';
 
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError('');
+    setIsLoading(true);
     
-    // JSON dosyasından kullanıcıyı bul
-    const user = usersData.users.find(
-      (u) => u.email === email && u.password === password
-    );
+    try {
+      const response = await fetch('/api/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, password }),
+      });
 
-    if (user) {
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Giriş sırasında bir hata oluştu');
+      }
+
       // Kullanıcı bilgilerini sessionStorage'a kaydet
-      sessionStorage.setItem('currentUser', JSON.stringify({
-        email: user.email,
-        name: user.name
-      }));
+      sessionStorage.setItem('currentUser', JSON.stringify(data.user));
       
       // Ana sayfaya yönlendir
       router.push('/camps');
-    } else {
-      setError('E-posta adresi veya şifre hatalı');
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -89,9 +99,12 @@ export default function LoginPage() {
           <div>
             <button
               type="submit"
-              className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              disabled={isLoading}
+              className={`w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white ${
+                isLoading ? 'bg-blue-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'
+              } focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500`}
             >
-              Giriş Yap
+              {isLoading ? 'Giriş Yapılıyor...' : 'Giriş Yap'}
             </button>
           </div>
         </form>

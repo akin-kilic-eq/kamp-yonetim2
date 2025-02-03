@@ -2,9 +2,6 @@
 
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import fs from 'fs/promises';
-import path from 'path';
-import usersData from '../../data/users.json';
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -14,44 +11,34 @@ export default function RegisterPage() {
     name: ''
   });
   const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-
-    if (!formData.email || !formData.password || !formData.name) {
-      setError('Lütfen tüm alanları doldurun');
-      return;
-    }
-
-    // E-posta adresi kontrolü
-    const existingUser = usersData.users.find(u => u.email === formData.email);
-    if (existingUser) {
-      setError('Bu e-posta adresi zaten kullanılıyor');
-      return;
-    }
+    setIsLoading(true);
 
     try {
-      // Yeni kullanıcıyı JSON dosyasına ekle
-      const newUser = {
-        email: formData.email,
-        password: formData.password,
-        name: formData.name
-      };
+      const response = await fetch('/api/register', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(formData),
+      });
 
-      const updatedUsers = {
-        users: [...usersData.users, newUser]
-      };
+      const data = await response.json();
 
-      // JSON dosyasını güncelle
-      const filePath = path.join(process.cwd(), 'data', 'users.json');
-      await fs.writeFile(filePath, JSON.stringify(updatedUsers, null, 2));
+      if (!response.ok) {
+        throw new Error(data.error || 'Kayıt sırasında bir hata oluştu');
+      }
 
-      // Kullanıcıyı giriş sayfasına yönlendir
+      // Başarılı kayıt sonrası giriş sayfasına yönlendir
       router.push('/login');
-    } catch (err) {
-      console.error('Kayıt hatası:', err);
-      setError('Kayıt sırasında bir hata oluştu');
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -126,9 +113,12 @@ export default function RegisterPage() {
           <div>
             <button
               type="submit"
-              className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              disabled={isLoading}
+              className={`w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white ${
+                isLoading ? 'bg-blue-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'
+              } focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500`}
             >
-              Kayıt Ol
+              {isLoading ? 'Kaydediliyor...' : 'Kayıt Ol'}
             </button>
           </div>
         </form>
