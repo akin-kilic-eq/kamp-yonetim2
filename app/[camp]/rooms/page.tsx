@@ -2,25 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-
-interface Worker {
-  id: string;
-  name: string;
-  registrationNumber: string;
-  project: string;
-  entryDate: string;
-  roomId?: string;
-}
-
-interface Room {
-  id: string;
-  campId: string;
-  number: string;
-  capacity: number;
-  project: string;
-  workers: Worker[];
-  availableBeds: number;
-}
+import { Room, Worker, Camp } from '../types';
 
 export default function RoomsPage() {
   const params = useParams();
@@ -35,7 +17,7 @@ export default function RoomsPage() {
   const [campName, setCampName] = useState('');
   const [newRoom, setNewRoom] = useState({
     number: '',
-    capacity: '',
+    capacity: 0,
     project: ''
   });
 
@@ -58,7 +40,8 @@ export default function RoomsPage() {
   const [showMenu, setShowMenu] = useState<string | null>(null);
   const [showChangeRoomModal, setShowChangeRoomModal] = useState(false);
   const [selectedRoomForChange, setSelectedRoomForChange] = useState('');
-  const [currentCamp, setCurrentCamp] = useState<any>(null);
+  const [currentCamp, setCurrentCamp] = useState<Camp | null>(null);
+  const [currentUser, setCurrentUser] = useState<{ email: string; camps: string[] } | null>(null);
 
   useEffect(() => {
     // Oturum kontrolü
@@ -69,30 +52,35 @@ export default function RoomsPage() {
     }
 
     const user = JSON.parse(userSession);
+    setCurrentUser(user);
 
-    // Kampları yükle ve kullanıcının kampını bul
-    const camps = JSON.parse(localStorage.getItem('camps') || '[]');
-    const foundCamp = camps.find((camp: any) => 
-      camp.name.toLowerCase().replace(/\s+/g, '') === params.camp && 
-      camp.userEmail === user.email
-    );
-
-    if (!foundCamp) {
+    // Mevcut kampı kontrol et
+    const currentCampData = localStorage.getItem('currentCamp');
+    if (!currentCampData) {
       router.push('/camps');
       return;
     }
 
-    setCurrentCamp(foundCamp);
+    const camp = JSON.parse(currentCampData);
+    
+    // Erişim kontrolü - hem kamp sahibi hem de paylaşılan kullanıcılar erişebilir
+    const hasAccess = camp.userEmail === user.email || (camp.sharedWith || []).includes(user.email);
+    if (!hasAccess) {
+      router.push('/camps');
+      return;
+    }
+
+    setCurrentCamp(camp);
 
     // Odaları yükle
     const allRooms = JSON.parse(localStorage.getItem('rooms') || '[]');
-    const campRooms = allRooms.filter((room: any) => room.campId === foundCamp.id);
+    const campRooms = allRooms.filter((room: Room) => room.campId === camp.id);
     setRooms(campRooms);
     setFilteredRooms(campRooms);
 
     // Kamp adını ayarla
-    setCampName(foundCamp.name);
-  }, [params.camp, router]);
+    setCampName(camp.name);
+  }, [router]);
 
   // Arama fonksiyonu
   useEffect(() => {
@@ -139,10 +127,10 @@ export default function RoomsPage() {
     localStorage.setItem('rooms', JSON.stringify(updatedRooms));
 
     // State'i güncelle
-    setRooms(updatedRooms.filter(room => room.campId === currentCamp.id));
-    setFilteredRooms(updatedRooms.filter(room => room.campId === currentCamp.id));
+    setRooms(updatedRooms.filter((room: Room) => room.campId === currentCamp.id));
+    setFilteredRooms(updatedRooms.filter((room: Room) => room.campId === currentCamp.id));
     setShowAddModal(false);
-    setNewRoom({ number: '', capacity: '', project: '' });
+    setNewRoom({ number: '', capacity: 0, project: '' });
   };
 
   const handleAddWorker = () => {
@@ -178,7 +166,7 @@ export default function RoomsPage() {
 
     // Tüm odaları al ve seçili odayı güncelle
     const allRooms = JSON.parse(localStorage.getItem('rooms') || '[]');
-    const updatedRooms = allRooms.map(room => {
+    const updatedRooms = allRooms.map((room: Room) => {
       if (room.id === selectedRoom.id) {
         return {
           ...room,
@@ -197,8 +185,8 @@ export default function RoomsPage() {
     localStorage.setItem('workers', JSON.stringify(updatedWorkers));
 
     // State'i güncelle
-    setRooms(updatedRooms.filter(room => room.campId === currentCamp.id));
-    setFilteredRooms(updatedRooms.filter(room => room.campId === currentCamp.id));
+    setRooms(updatedRooms.filter((room: Room) => room.campId === currentCamp.id));
+    setFilteredRooms(updatedRooms.filter((room: Room) => room.campId === currentCamp.id));
     setShowAddWorkerModal(false);
     setNewWorker({
       name: '',
@@ -220,19 +208,48 @@ export default function RoomsPage() {
       room.id === selectedRoom.id ? selectedRoom : room
     );
 
+    // Local storage güncelle
+    const allRooms = JSON.parse(localStorage.getItem('rooms') || '[]');
+    const otherRooms = allRooms.filter((room: Room) => room.campId !== currentCamp.id);
+    localStorage.setItem('rooms', JSON.stringify([...otherRooms, ...updatedRooms]));
+
     setRooms(updatedRooms);
-    localStorage.setItem(`rooms_${campName}`, JSON.stringify(updatedRooms));
+    setFilteredRooms(updatedRooms);
     setShowEditModal(false);
     setSelectedRoom(null);
   };
 
-  const handleDeleteRoom = (roomId: string) => {
-    if (window.confirm('Bu odayı silmek istediğinize emin misiniz?')) {
-      const updatedRooms = rooms.filter(room => room.id !== roomId);
-      setRooms(updatedRooms);
-      localStorage.setItem(`rooms_${campName}`, JSON.stringify(updatedRooms));
-      setActiveMenu(null);
-    }
+  const handleDeleteRoom = (room: Room) => {
+    if (!window.confirm('Bu odayı silmek istediğinize emin misiniz?')) return;
+
+    // Odadaki işçileri bul
+    const workersInRoom = room.workers || [];
+
+    // Odayı sil ve diğer odaları güncelle
+    const updatedRooms = rooms.filter(r => r.id !== room.id);
+
+    // Local storage'daki tüm odaları al
+    const allRooms = JSON.parse(localStorage.getItem('rooms') || '[]');
+    const otherRooms = allRooms.filter((r: Room) => r.campId !== currentCamp.id);
+
+    // Silinen odadaki işçilerin bilgilerini güncelle
+    const updatedAllRooms = [...otherRooms, ...updatedRooms].map((r: Room) => ({
+      ...r,
+      workers: r.workers.map((w: Worker) => 
+        workersInRoom.some(worker => worker.id === w.id)
+          ? { ...w, roomId: "", entryDate: "-" }
+          : w
+      )
+    }));
+
+    // Local storage'ı güncelle
+    localStorage.setItem('rooms', JSON.stringify(updatedAllRooms));
+
+    // State'leri güncelle
+    setRooms(updatedRooms);
+    setFilteredRooms(updatedRooms);
+    setActiveMenu(null);
+    setSelectedRoom(null);
   };
 
   const toggleRoomDetails = (roomId: string) => {
@@ -281,39 +298,43 @@ export default function RoomsPage() {
     setActiveMenu(null);
   };
 
-  const handleUpdateWorker = () => {
+  const handleUpdateWorker = (worker: Worker) => {
     if (!selectedWorker || !newWorker.name || !newWorker.registrationNumber || !newWorker.project) {
       alert('Lütfen tüm alanları doldurun');
       return;
     }
 
-    // Local storage'dan tüm odaları al
+    const workerData: Worker = {
+      ...selectedWorker,
+      name: newWorker.name,
+      registrationNumber: newWorker.registrationNumber,
+      project: newWorker.project,
+      entryDate: newWorker.entryDate
+    };
+
+    // Odaları güncelle
+    const updatedRooms = rooms.map((room: Room) => {
+      if (room.workers.some(w => w.id === selectedWorker.id)) {
+        return {
+          ...room,
+          workers: room.workers.map(w => 
+            w.id === selectedWorker.id ? workerData : w
+          )
+        };
+      }
+      return room;
+    });
+
+    // Local storage güncelle
     const allRooms = JSON.parse(localStorage.getItem('rooms') || '[]');
-    const otherRooms = allRooms.filter((r: Room) => r.campId !== currentCamp.id);
+    const otherRooms = allRooms.filter((room: Room) => room.campId !== currentCamp.id);
+    localStorage.setItem('rooms', JSON.stringify([...otherRooms, ...updatedRooms]));
 
-    // Güncel kampın odalarını güncelle
-    const updatedCampRooms = rooms.map((room: Room) => ({
-      ...room,
-      workers: room.workers.map((w: Worker) => 
-        w.id === selectedWorker.id
-          ? {
-              ...w,
-              name: newWorker.name,
-              registrationNumber: newWorker.registrationNumber,
-              project: newWorker.project,
-              entryDate: newWorker.entryDate
-            }
-          : w
-      )
-    }));
+    // State'leri güncelle
+    setRooms(updatedRooms);
+    setFilteredRooms(updatedRooms);
 
-    // Tüm odaları güncelle
-    const updatedAllRooms = [...otherRooms, ...updatedCampRooms];
-    localStorage.setItem('rooms', JSON.stringify(updatedAllRooms));
-
-    // State'i güncelle
-    setRooms(updatedCampRooms);
-    setFilteredRooms(updatedCampRooms);
+    // Modalı kapat
     setShowEditWorkerModal(false);
     setSelectedWorker(null);
     setNewWorker({
@@ -365,32 +386,32 @@ export default function RoomsPage() {
     setSelectedWorker(null);
   };
 
-  const handleRemoveWorker = (workerId: string) => {
-    // Odalardan işçiyi sil ve workers listesinde güncelle
-    const updatedRooms = rooms.map((room: Room) => {
-      const workerInRoom = room.workers.find(w => w.id === workerId);
+  const handleRemoveWorker = (room: Room, worker: Worker) => {
+    // Odalardan işçiyi sil ve workers listesini güncelle
+    const updatedRooms = rooms.map((r: Room) => {
+      const workerInRoom = r.workers.find(w => w.id === worker.id);
       if (workerInRoom) {
         // İşçiyi odadan sil ve boş yatak sayısını güncelle
         return {
-          ...room,
-          workers: room.workers.filter(w => w.id !== workerId),
-          availableBeds: room.availableBeds + 1
+          ...r,
+          workers: r.workers.filter(w => w.id !== worker.id),
+          availableBeds: r.availableBeds + 1
         };
       }
-      return room;
+      return r;
     });
 
     // Local storage'daki tüm odaları güncelle
     const allRooms = JSON.parse(localStorage.getItem('rooms') || '[]');
     const otherRooms = allRooms.filter((r: Room) => r.campId !== currentCamp.id);
     
-    // Workers listesinde işçinin bilgilerini güncelle
-    const updatedAllRooms = [...otherRooms, ...updatedRooms].map((room: Room) => ({
-      ...room,
-      workers: room.workers.map((worker: Worker) => 
-        worker.id === workerId 
-          ? { ...worker, roomId: "", entryDate: "-" }
-          : worker
+    // Sadece silinen işçinin bilgilerini güncelle
+    const updatedAllRooms = [...otherRooms, ...updatedRooms].map((r: Room) => ({
+      ...r,
+      workers: r.workers.map((w: Worker) => 
+        w.id === worker.id 
+          ? { ...w, roomId: "", entryDate: "-" }
+          : w
       )
     }));
 
@@ -402,6 +423,31 @@ export default function RoomsPage() {
     setShowDeleteModal(false);
     setSelectedWorker(null);
     setActiveMenu(null);
+  };
+
+  const handleUpdateRoom = (room: Room) => {
+    if (!room || !room.name || !room.capacity) {
+      alert('Lütfen tüm alanları doldurun');
+      return;
+    }
+
+    // Odaları güncelle
+    const updatedRooms = rooms.map((r: Room) => 
+      r.id === room.id ? room : r
+    );
+
+    // Local storage güncelle
+    const allRooms = JSON.parse(localStorage.getItem('rooms') || '[]');
+    const otherRooms = allRooms.filter((r: Room) => r.campId !== currentCamp.id);
+    localStorage.setItem('rooms', JSON.stringify([...otherRooms, ...updatedRooms]));
+
+    // State'leri güncelle
+    setRooms(updatedRooms);
+    setFilteredRooms(updatedRooms);
+
+    // Modalı kapat
+    setShowEditModal(false);
+    setSelectedRoom(null);
   };
 
   return (
@@ -453,10 +499,13 @@ export default function RoomsPage() {
                         Oda No
                       </th>
                       <th scope="col" className="px-4 py-3 text-left text-sm font-semibold text-gray-900">
-                        Şantiye
+                        Şantiyesi
                       </th>
                       <th scope="col" className="px-4 py-3 text-left text-sm font-semibold text-gray-900">
                         Kapasite
+                      </th>
+                      <th scope="col" className="px-4 py-3 text-left text-sm font-semibold text-gray-900">
+                        Boş Yatak
                       </th>
                       <th scope="col" className="px-4 py-3 text-left text-sm font-semibold text-gray-900">
                         Doluluk
@@ -489,13 +538,13 @@ export default function RoomsPage() {
                           >
                             {room.capacity}
                           </td>
-                          <td 
-                            className="px-4 py-4 whitespace-nowrap text-sm text-gray-500 cursor-pointer"
-                            onClick={() => toggleRoomDetails(room.id)}
-                          >
-                            {room.workers.length}/{room.capacity}
+                          <td className={`px-4 py-4 whitespace-nowrap text-sm ${(room.capacity - room.workers.length) > 0 ? 'text-green-600 font-medium' : 'text-red-600 font-medium'}`}>
+                            {room.capacity - room.workers.length}
                           </td>
-                          <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500 text-right relative">
+                          <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {room.workers.length}
+                          </td>
+                          <td className="relative whitespace-nowrap py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-6">
                             <div className="relative">
                               <button
                                 onClick={(e) => {
@@ -507,7 +556,7 @@ export default function RoomsPage() {
                                     const rect = (e.target as HTMLElement).getBoundingClientRect();
                                     setMenuPosition({
                                       left: rect.left - 160,
-                                      top: rect.top + window.scrollY
+                                      top: rect.top + window.scrollY - 80
                                     });
                                     setActiveMenu(room.id);
                                   }
@@ -539,8 +588,7 @@ export default function RoomsPage() {
                                     <button
                                       className="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100"
                                       onClick={() => {
-                                        setSelectedRoom(room);
-                                        setShowDeleteModal(true);
+                                        handleDeleteRoom(room);
                                         setActiveMenu(null);
                                       }}
                                     >
@@ -645,7 +693,7 @@ export default function RoomsPage() {
                                                     onClick={(e) => {
                                                       e.stopPropagation();
                                                       if (window.confirm('Bu işçiyi silmek istediğinizden emin misiniz?')) {
-                                                        handleRemoveWorker(worker.id);
+                                                        handleRemoveWorker(room, worker);
                                                         setActiveMenu(null);
                                                       }
                                                     }}
@@ -731,7 +779,7 @@ export default function RoomsPage() {
                     id="capacity"
                     min="1"
                     value={newRoom.capacity}
-                    onChange={(e) => setNewRoom({ ...newRoom, capacity: parseInt(e.target.value) })}
+                    onChange={(e) => setNewRoom({ ...newRoom, capacity: parseInt(e.target.value) || 0 })}
                     className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
                   />
                 </div>
@@ -794,7 +842,7 @@ export default function RoomsPage() {
                     type="number"
                     id="editCapacity"
                     min="1"
-                    value={selectedRoom.capacity}
+                    value={selectedRoom.capacity.toString()}
                     onChange={(e) => setSelectedRoom({ ...selectedRoom, capacity: parseInt(e.target.value) })}
                     className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
                   />
@@ -970,7 +1018,11 @@ export default function RoomsPage() {
                   İptal
                 </button>
                 <button
-                  onClick={handleUpdateWorker}
+                  onClick={() => {
+                    if (selectedWorker) {
+                      handleUpdateWorker(selectedWorker);
+                    }
+                  }}
                   className="rounded-md border border-transparent bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
                 >
                   Kaydet

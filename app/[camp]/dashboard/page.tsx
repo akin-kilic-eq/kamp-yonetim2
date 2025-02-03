@@ -13,6 +13,13 @@ interface Stats {
   occupancyRate: number;
 }
 
+interface Camp {
+  id: string;
+  name: string;
+  userEmail: string;
+  sharedWith?: string[];
+}
+
 export default function CampDashboard({ params }: { params: { camp: string } }) {
   const router = useRouter();
   const [campName, setCampName] = useState('');
@@ -25,6 +32,8 @@ export default function CampDashboard({ params }: { params: { camp: string } }) 
     totalWorkers: 0,
     occupancyRate: 0
   });
+  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [currentCamp, setCurrentCamp] = useState<Camp | null>(null);
 
   useEffect(() => {
     // Oturum kontrolü
@@ -35,25 +44,29 @@ export default function CampDashboard({ params }: { params: { camp: string } }) 
     }
 
     const user = JSON.parse(userSession);
+    setCurrentUser(user);
 
-    // Kampları yükle ve kullanıcının kampını bul
-    const camps = JSON.parse(localStorage.getItem('camps') || '[]');
-    const currentCamp = camps.find((camp: any) => 
-      camp.name.toLowerCase().replace(/\s+/g, '') === params.camp && 
-      camp.userEmail === user.email
-    );
-
-    if (!currentCamp) {
+    // Mevcut kampı kontrol et
+    const currentCampData = localStorage.getItem('currentCamp');
+    if (!currentCampData) {
       router.push('/camps');
       return;
     }
 
-    setCampName(currentCamp.name);
-    setCampDescription(currentCamp.description || '');
+    const camp = JSON.parse(currentCampData);
+    
+    // Erişim kontrolü - hem kamp sahibi hem de paylaşılan kullanıcılar erişebilir
+    const hasAccess = camp.userEmail === user.email || (camp.sharedWith || []).includes(user.email);
+    if (!hasAccess) {
+      router.push('/camps');
+      return;
+    }
 
+    setCurrentCamp(camp);
+    
     // İstatistikleri hesapla
     const rooms = JSON.parse(localStorage.getItem('rooms') || '[]');
-    const campRooms = rooms.filter((room: any) => room.campId === currentCamp.id);
+    const campRooms = rooms.filter((room: any) => room.campId === camp.id);
 
     const totalRooms = campRooms.length;
     const totalCapacity = campRooms.reduce((sum: number, room: any) => sum + room.capacity, 0);
@@ -71,7 +84,7 @@ export default function CampDashboard({ params }: { params: { camp: string } }) 
       totalWorkers,
       occupancyRate
     });
-  }, [params.camp, router]);
+  }, [router]);
 
   const handleLogout = () => {
     sessionStorage.removeItem('currentUser');
@@ -83,9 +96,8 @@ export default function CampDashboard({ params }: { params: { camp: string } }) 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="bg-white/90 backdrop-blur-sm rounded-lg shadow-xl p-6 mb-8">
           <div className="text-center w-full">
-            <p className="text-lg font-semibold text-gray-700">{campName}</p>
-            <h1 className="text-2xl font-bold text-gray-900 mt-2">Kamp Yönetim Paneli</h1>
-            <p className="text-gray-600 mt-2">{campDescription}</p>
+            <h1 className="text-2xl font-bold text-gray-900 mb-2">{currentCamp?.name}</h1>
+            <h2 className="text-xl text-gray-700">Kamp Yönetim Paneli</h2>
           </div>
         </div>
 
@@ -161,6 +173,7 @@ export default function CampDashboard({ params }: { params: { camp: string } }) 
               </div>
             </div>
           </div>
+
           <div 
             onClick={() => router.push(`/${params.camp}/rooms`)}
             className="bg-gradient-to-br from-purple-500 to-purple-600 overflow-hidden shadow-lg rounded-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 cursor-pointer"
@@ -175,6 +188,7 @@ export default function CampDashboard({ params }: { params: { camp: string } }) 
               </div>
             </div>
           </div>
+
           <div 
             onClick={() => router.push(`/${params.camp}/report`)}
             className="bg-gradient-to-br from-green-500 to-green-600 overflow-hidden shadow-lg rounded-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 cursor-pointer sm:col-span-2"
@@ -193,4 +207,4 @@ export default function CampDashboard({ params }: { params: { camp: string } }) 
       </div>
     </div>
   );
-} 
+}
