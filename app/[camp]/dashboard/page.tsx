@@ -26,6 +26,20 @@ interface PageProps {
   };
 }
 
+interface User {
+  email: string;
+}
+
+interface Room {
+  campId: string;
+  capacity: number;
+  workers?: Worker[];
+}
+
+interface Worker {
+  id: string;
+}
+
 export default function CampDashboard({ params }: PageProps) {
   const router = useRouter();
   const [campName, setCampName] = useState('');
@@ -38,7 +52,7 @@ export default function CampDashboard({ params }: PageProps) {
     totalWorkers: 0,
     occupancyRate: 0
   });
-  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [currentCamp, setCurrentCamp] = useState<Camp | null>(null);
 
   useEffect(() => {
@@ -49,7 +63,7 @@ export default function CampDashboard({ params }: PageProps) {
       return;
     }
 
-    const user = JSON.parse(userSession);
+    const user = JSON.parse(userSession) as User;
     setCurrentUser(user);
 
     // Mevcut kampı kontrol et
@@ -59,7 +73,7 @@ export default function CampDashboard({ params }: PageProps) {
       return;
     }
 
-    const camp = JSON.parse(currentCampData);
+    const camp = JSON.parse(currentCampData) as Camp;
     
     // Erişim kontrolü - hem kamp sahibi hem de paylaşılan kullanıcılar erişebilir
     const hasAccess = camp.userEmail === user.email || (camp.sharedWith || []).includes(user.email);
@@ -71,12 +85,12 @@ export default function CampDashboard({ params }: PageProps) {
     setCurrentCamp(camp);
     
     // İstatistikleri hesapla
-    const rooms = JSON.parse(localStorage.getItem('rooms') || '[]');
-    const campRooms = rooms.filter((room: any) => room.campId === camp.id);
+    const rooms = JSON.parse(localStorage.getItem('rooms') || '[]') as Room[];
+    const campRooms = rooms.filter((room) => room.campId === camp.id);
 
     const totalRooms = campRooms.length;
-    const totalCapacity = campRooms.reduce((sum: number, room: any) => sum + room.capacity, 0);
-    const occupiedBeds = campRooms.reduce((sum: number, room: any) => 
+    const totalCapacity = campRooms.reduce((sum, room) => sum + room.capacity, 0);
+    const occupiedBeds = campRooms.reduce((sum, room) => 
       sum + (room.workers ? room.workers.length : 0), 0);
     const availableBeds = totalCapacity - occupiedBeds;
     const totalWorkers = occupiedBeds;

@@ -3,6 +3,7 @@
 import React from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
+import Image from 'next/image';
 
 export default function CampLayout({
   children,
@@ -24,9 +25,11 @@ export default function CampLayout({
           <div className="flex justify-between h-16">
             <div className="flex items-center">
               <Link href={`/${params.camp}/dashboard`} className="flex-shrink-0">
-                <img
+                <Image 
                   src="/antteq-logo.png"
                   alt="ANTTEQ Logo"
+                  width={40}
+                  height={40}
                   className="h-8 w-auto"
                 />
               </Link>
