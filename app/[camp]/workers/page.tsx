@@ -2,25 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-
-interface Worker {
-  id: string;
-  name: string;
-  registrationNumber: string;
-  project: string;
-  entryDate: string;
-  roomId?: string;
-}
-
-interface Room {
-  id: string;
-  campId: string;
-  number: string;
-  capacity: number;
-  project: string;
-  workers: Worker[];
-  availableBeds: number;
-}
+import { Room, Worker } from '../types';
 
 export default function WorkersPage() {
   const params = useParams();
@@ -32,6 +14,7 @@ export default function WorkersPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filteredWorkers, setFilteredWorkers] = useState<Worker[]>([]);
   const [currentCamp, setCurrentCamp] = useState<any>(null);
+  const [currentUser, setCurrentUser] = useState<any>(null);
   
   // Modal states
   const [showAddModal, setShowAddModal] = useState(false);
@@ -41,13 +24,38 @@ export default function WorkersPage() {
   
   // Form states
   const [selectedWorker, setSelectedWorker] = useState<Worker | null>(null);
+  const [selectedRoom, setSelectedRoom] = useState<Room | null>(null);
   const [newWorker, setNewWorker] = useState({
     name: '',
     registrationNumber: '',
     project: '',
     entryDate: new Date().toISOString().split('T')[0]
   });
-  const [selectedRoom, setSelectedRoom] = useState('');
+
+  const [sortConfig, setSortConfig] = useState<{
+    key: string;
+    direction: 'ascending' | 'descending';
+  } | null>(null);
+
+  const sortData = (key: string) => {
+    let direction: 'ascending' | 'descending' = 'ascending';
+    
+    if (sortConfig && sortConfig.key === key && sortConfig.direction === 'ascending') {
+      direction = 'descending';
+    }
+    
+    const sortedData = [...filteredWorkers].sort((a, b) => {
+      const aValue = a[key] || '';
+      const bValue = b[key] || '';
+      
+      if (aValue < bValue) return direction === 'ascending' ? -1 : 1;
+      if (aValue > bValue) return direction === 'ascending' ? 1 : -1;
+      return 0;
+    });
+
+    setFilteredWorkers(sortedData);
+    setSortConfig({ key, direction });
+  };
 
   useEffect(() => {
     // Oturum kontrolü
@@ -58,31 +66,43 @@ export default function WorkersPage() {
     }
 
     const user = JSON.parse(userSession);
+    setCurrentUser(user);
 
-    // Kampları yükle ve kullanıcının kampını bul
-    const camps = JSON.parse(localStorage.getItem('camps') || '[]');
-    const foundCamp = camps.find((camp: any) => 
-      camp.name.toLowerCase().replace(/\s+/g, '') === params.camp && 
-      camp.userEmail === user.email
-    );
-
-    if (!foundCamp) {
+    // Mevcut kampı kontrol et
+    const currentCampData = localStorage.getItem('currentCamp');
+    if (!currentCampData) {
       router.push('/camps');
       return;
     }
 
-    setCurrentCamp(foundCamp);
+    const camp = JSON.parse(currentCampData);
+    
+    // Erişim kontrolü - hem kamp sahibi hem de paylaşılan kullanıcılar erişebilir
+    const hasAccess = camp.userEmail === user.email || (camp.sharedWith || []).includes(user.email);
+    if (!hasAccess) {
+      router.push('/camps');
+      return;
+    }
+
+    setCurrentCamp(camp);
 
     // Odaları yükle
     const allRooms = JSON.parse(localStorage.getItem('rooms') || '[]');
-    const campRooms = allRooms.filter((room: Room) => room.campId === foundCamp.id);
+    const campRooms = allRooms.filter((room: Room) => room.campId === camp.id);
     setRooms(campRooms);
 
     // İşçileri yükle
-    const workersFromRooms = campRooms.flatMap(room => room.workers);
-    setWorkers(workersFromRooms);
-    setFilteredWorkers(workersFromRooms);
-  }, [params.camp, router]);
+    const workersWithRoomInfo = campRooms.flatMap((room: Room) => 
+      (room.workers || []).map((worker: Worker) => ({
+        ...worker,
+        roomNumber: room.number,
+        roomId: room.id
+      }))
+    );
+
+    setWorkers(workersWithRoomInfo);
+    setFilteredWorkers(workersWithRoomInfo);
+  }, [router]);
 
   // Arama fonksiyonu
   useEffect(() => {
@@ -103,7 +123,7 @@ export default function WorkersPage() {
       return;
     }
 
-    const selectedRoomData = rooms.find(room => room.id === selectedRoom);
+    const selectedRoomData = rooms.find(room => room.id === selectedRoom.id);
     if (!selectedRoomData) {
       alert('Oda bulunamadı');
       return;
@@ -119,12 +139,12 @@ export default function WorkersPage() {
     const workerData: Worker = {
       id: Date.now().toString(),
       ...newWorker,
-      roomId: selectedRoom
+      roomId: selectedRoom.id
     };
 
     // Odaları güncelle
     const updatedRooms = rooms.map(room => {
-      if (room.id === selectedRoom) {
+      if (room.id === selectedRoom.id) {
         return {
           ...room,
           workers: [...room.workers, workerData]
@@ -152,22 +172,22 @@ export default function WorkersPage() {
       project: '',
       entryDate: new Date().toISOString().split('T')[0]
     });
-    setSelectedRoom('');
+    setSelectedRoom(null);
   };
 
-  const handleUpdateWorker = () => {
-    if (!selectedWorker || !selectedWorker.name || !selectedWorker.registrationNumber || !selectedWorker.project) {
+  const handleUpdateWorker = (worker: Worker) => {
+    if (!worker || !worker.name || !worker.registrationNumber || !worker.project) {
       alert('Lütfen tüm alanları doldurun');
       return;
     }
 
     // Odaları güncelle
     const updatedRooms = rooms.map(room => {
-      if (room.workers.some(w => w.id === selectedWorker.id)) {
+      if (room.workers.some(w => w.id === worker.id)) {
         return {
           ...room,
           workers: room.workers.map(w => 
-            w.id === selectedWorker.id ? selectedWorker : w
+            w.id === worker.id ? worker : w
           )
         };
       }
@@ -190,16 +210,15 @@ export default function WorkersPage() {
     setSelectedWorker(null);
   };
 
-  const handleDeleteWorker = () => {
-    if (!selectedWorker) return;
+  const handleDeleteWorker = (worker: Worker) => {
+    if (!worker || !worker.roomId) return;
 
     // Odaları güncelle
     const updatedRooms = rooms.map(room => {
-      if (room.workers.some(w => w.id === selectedWorker.id)) {
+      if (room.id === worker.roomId) {
         return {
           ...room,
-          workers: room.workers.filter(w => w.id !== selectedWorker.id),
-          availableBeds: room.availableBeds + 1
+          workers: room.workers.filter(w => w.id !== worker.id)
         };
       }
       return room;
@@ -212,7 +231,13 @@ export default function WorkersPage() {
 
     // State'leri güncelle
     setRooms(updatedRooms);
-    const remainingWorkers = updatedRooms.flatMap(room => room.workers);
+    const remainingWorkers = updatedRooms.flatMap(room => 
+      room.workers.map(w => ({
+        ...w,
+        roomNumber: room.number,
+        roomId: room.id
+      }))
+    );
     setWorkers(remainingWorkers);
     setFilteredWorkers(remainingWorkers);
 
@@ -221,12 +246,12 @@ export default function WorkersPage() {
     setSelectedWorker(null);
   };
 
-  const handleChangeRoom = () => {
-    if (!selectedWorker || !selectedRoom) return;
+  const handleChangeRoom = (worker: Worker, newRoom: Room | null) => {
+    if (!worker || !worker.roomId || !newRoom) return;
 
     // Eski ve yeni odaları bul
-    const currentRoom = rooms.find(room => room.workers.some(w => w.id === selectedWorker.id));
-    const targetRoom = rooms.find(room => room.id === selectedRoom);
+    const currentRoom = rooms.find(room => room.id === worker.roomId);
+    const targetRoom = rooms.find(room => room.id === newRoom.id);
 
     if (!currentRoom || !targetRoom) return;
 
@@ -240,15 +265,23 @@ export default function WorkersPage() {
     // Odaları güncelle
     const updatedRooms = rooms.map(room => {
       if (room.id === currentRoom.id) {
+        // Eski odadan işçiyi çıkar
         return {
           ...room,
-          workers: room.workers.filter(w => w.id !== selectedWorker.id)
+          workers: room.workers.filter(w => w.id !== worker.id)
         };
       }
       if (room.id === targetRoom.id) {
+        // Yeni odaya işçiyi ekle
+        const updatedWorker = {
+          ...worker,
+          roomId: room.id,
+          roomNumber: room.number,
+          entryDate: new Date().toISOString().split('T')[0]
+        };
         return {
           ...room,
-          workers: [...room.workers, { ...selectedWorker, roomId: room.id }]
+          workers: [...room.workers, updatedWorker]
         };
       }
       return room;
@@ -261,13 +294,19 @@ export default function WorkersPage() {
 
     // State'leri güncelle
     setRooms(updatedRooms);
-    const updatedWorkers = updatedRooms.flatMap(room => room.workers);
+    const updatedWorkers = updatedRooms.flatMap(room => 
+      room.workers.map(w => ({
+        ...w,
+        roomNumber: room.number,
+        roomId: room.id
+      }))
+    );
     setWorkers(updatedWorkers);
     setFilteredWorkers(updatedWorkers);
 
     // Modalı kapat
     setShowChangeRoomModal(false);
-    setSelectedRoom('');
+    setSelectedRoom(null);
     setSelectedWorker(null);
   };
 
@@ -310,20 +349,90 @@ export default function WorkersPage() {
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  İsim
+                <th 
+                  scope="col" 
+                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                  onClick={() => sortData('name')}
+                >
+                  <div className="flex items-center space-x-1">
+                    <span>İsim</span>
+                    <div className="flex flex-col">
+                      <svg className={`w-3 h-3 ${sortConfig?.key === 'name' && sortConfig.direction === 'ascending' ? 'text-blue-600' : 'text-gray-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 15l7-7 7 7" />
+                      </svg>
+                      <svg className={`w-3 h-3 ${sortConfig?.key === 'name' && sortConfig.direction === 'descending' ? 'text-blue-600' : 'text-gray-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </div>
+                  </div>
                 </th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Sicil No
+                <th 
+                  scope="col" 
+                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                  onClick={() => sortData('registrationNumber')}
+                >
+                  <div className="flex items-center space-x-1">
+                    <span>Sicil No</span>
+                    <div className="flex flex-col">
+                      <svg className={`w-3 h-3 ${sortConfig?.key === 'registrationNumber' && sortConfig.direction === 'ascending' ? 'text-blue-600' : 'text-gray-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 15l7-7 7 7" />
+                      </svg>
+                      <svg className={`w-3 h-3 ${sortConfig?.key === 'registrationNumber' && sortConfig.direction === 'descending' ? 'text-blue-600' : 'text-gray-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </div>
+                  </div>
                 </th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Proje
+                <th 
+                  scope="col" 
+                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                  onClick={() => sortData('project')}
+                >
+                  <div className="flex items-center space-x-1">
+                    <span>Proje</span>
+                    <div className="flex flex-col">
+                      <svg className={`w-3 h-3 ${sortConfig?.key === 'project' && sortConfig.direction === 'ascending' ? 'text-blue-600' : 'text-gray-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 15l7-7 7 7" />
+                      </svg>
+                      <svg className={`w-3 h-3 ${sortConfig?.key === 'project' && sortConfig.direction === 'descending' ? 'text-blue-600' : 'text-gray-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </div>
+                  </div>
                 </th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Giriş Tarihi
+                <th 
+                  scope="col" 
+                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                  onClick={() => sortData('entryDate')}
+                >
+                  <div className="flex items-center space-x-1">
+                    <span>Giriş Tarihi</span>
+                    <div className="flex flex-col">
+                      <svg className={`w-3 h-3 ${sortConfig?.key === 'entryDate' && sortConfig.direction === 'ascending' ? 'text-blue-600' : 'text-gray-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 15l7-7 7 7" />
+                      </svg>
+                      <svg className={`w-3 h-3 ${sortConfig?.key === 'entryDate' && sortConfig.direction === 'descending' ? 'text-blue-600' : 'text-gray-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </div>
+                  </div>
                 </th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Oda
+                <th 
+                  scope="col" 
+                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                  onClick={() => sortData('roomNumber')}
+                >
+                  <div className="flex items-center space-x-1">
+                    <span>Oda</span>
+                    <div className="flex flex-col">
+                      <svg className={`w-3 h-3 ${sortConfig?.key === 'roomNumber' && sortConfig.direction === 'ascending' ? 'text-blue-600' : 'text-gray-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 15l7-7 7 7" />
+                      </svg>
+                      <svg className={`w-3 h-3 ${sortConfig?.key === 'roomNumber' && sortConfig.direction === 'descending' ? 'text-blue-600' : 'text-gray-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </div>
+                  </div>
                 </th>
                 <th scope="col" className="relative px-6 py-3">
                   <span className="sr-only">İşlemler</span>
@@ -432,8 +541,8 @@ export default function WorkersPage() {
                 </label>
                 <select
                   id="room"
-                  value={selectedRoom}
-                  onChange={(e) => setSelectedRoom(e.target.value)}
+                  value={selectedRoom?.id}
+                  onChange={(e) => setSelectedRoom(rooms.find(room => room.id === e.target.value) || null)}
                   className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
                 >
                   <option value="">Oda Seçin</option>
@@ -475,7 +584,7 @@ export default function WorkersPage() {
                     project: '',
                     entryDate: new Date().toISOString().split('T')[0]
                   });
-                  setSelectedRoom('');
+                  setSelectedRoom(null);
                 }}
                 className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
               >
@@ -561,7 +670,7 @@ export default function WorkersPage() {
                 İptal
               </button>
               <button
-                onClick={handleUpdateWorker}
+                onClick={() => handleUpdateWorker(selectedWorker)}
                 className="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700"
               >
                 Kaydet
@@ -590,7 +699,7 @@ export default function WorkersPage() {
                 İptal
               </button>
               <button
-                onClick={handleDeleteWorker}
+                onClick={() => handleDeleteWorker(selectedWorker)}
                 className="px-4 py-2 text-sm font-medium text-white bg-red-600 border border-transparent rounded-md hover:bg-red-700"
               >
                 Sil
@@ -620,8 +729,8 @@ export default function WorkersPage() {
               </label>
               <select
                 id="newRoom"
-                value={selectedRoom}
-                onChange={(e) => setSelectedRoom(e.target.value)}
+                value={selectedRoom?.id}
+                onChange={(e) => setSelectedRoom(rooms.find(room => room.id === e.target.value) || null)}
                 className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
               >
                 <option value="">Oda Seçin</option>
@@ -653,14 +762,14 @@ export default function WorkersPage() {
               <button
                 onClick={() => {
                   setShowChangeRoomModal(false);
-                  setSelectedRoom('');
+                  setSelectedRoom(null);
                 }}
                 className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
               >
                 İptal
               </button>
               <button
-                onClick={handleChangeRoom}
+                onClick={() => handleChangeRoom(selectedWorker, selectedRoom)}
                 disabled={!selectedRoom}
                 className={`px-4 py-2 text-sm font-medium text-white border border-transparent rounded-md ${
                   selectedRoom ? 'bg-blue-600 hover:bg-blue-700' : 'bg-gray-400 cursor-not-allowed'
