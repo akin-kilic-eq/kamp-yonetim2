@@ -1,6 +1,12 @@
 import { NextResponse } from 'next/server';
-import fs from 'fs/promises';
-import path from 'path';
+import clientPromise from '@/lib/mongodb';
+
+interface User {
+  email: string;
+  password: string;
+  name: string;
+  createdAt: string;
+}
 
 export async function POST(request: Request) {
   try {
@@ -15,13 +21,11 @@ export async function POST(request: Request) {
       );
     }
 
-    // users.json dosyasını oku
-    const filePath = path.join(process.cwd(), 'data', 'users.json');
-    const fileContent = await fs.readFile(filePath, 'utf-8');
-    const usersData = JSON.parse(fileContent);
+    const client = await clientPromise;
+    const db = client.db('kamp-yonetim');
 
     // E-posta adresi kontrolü
-    const existingUser = usersData.users.find((u: any) => u.email === email);
+    const existingUser = await db.collection('users').findOne({ email });
     if (existingUser) {
       return NextResponse.json(
         { error: 'Bu e-posta adresi zaten kullanılıyor' },
@@ -30,11 +34,14 @@ export async function POST(request: Request) {
     }
 
     // Yeni kullanıcıyı ekle
-    const newUser = { email, password, name };
-    usersData.users.push(newUser);
+    const newUser: User = {
+      email,
+      password,
+      name,
+      createdAt: new Date().toISOString()
+    };
 
-    // Dosyayı güncelle
-    await fs.writeFile(filePath, JSON.stringify(usersData, null, 2));
+    await db.collection('users').insertOne(newUser);
 
     return NextResponse.json({ success: true }, { status: 201 });
   } catch (error) {

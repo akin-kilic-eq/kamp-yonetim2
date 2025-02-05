@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
-import fs from 'fs/promises';
-import path from 'path';
+import clientPromise from '@/lib/mongodb';
 
 export async function POST(request: Request) {
   try {
@@ -15,15 +14,14 @@ export async function POST(request: Request) {
       );
     }
 
-    // users.json dosyasını oku
-    const filePath = path.join(process.cwd(), 'data', 'users.json');
-    const fileContent = await fs.readFile(filePath, 'utf-8');
-    const usersData = JSON.parse(fileContent);
+    const client = await clientPromise;
+    const db = client.db('kamp-yonetim');
 
     // Kullanıcıyı bul
-    const user = usersData.users.find(
-      (u: any) => u.email === email && u.password === password
-    );
+    const user = await db.collection('users').findOne({
+      email,
+      password
+    });
 
     if (!user) {
       return NextResponse.json(
