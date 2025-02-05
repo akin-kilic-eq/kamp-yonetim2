@@ -19,6 +19,7 @@ export default function RegisterPage() {
     setIsLoading(true);
 
     try {
+      console.log('Kayıt isteği gönderiliyor:', { ...formData, password: '***' });
       const response = await fetch('/api/register', {
         method: 'POST',
         headers: {
@@ -28,14 +29,16 @@ export default function RegisterPage() {
       });
 
       const data = await response.json();
+      console.log('Kayıt cevabı:', data);
 
       if (!response.ok) {
-        throw new Error(data.error || 'Kayıt sırasında bir hata oluştu');
+        throw new Error(data.error || data.details || 'Kayıt sırasında bir hata oluştu');
       }
 
       // Başarılı kayıt sonrası giriş sayfasına yönlendir
       router.push('/login');
     } catch (err: any) {
+      console.error('Kayıt hatası:', err);
       setError(err.message);
     } finally {
       setIsLoading(false);

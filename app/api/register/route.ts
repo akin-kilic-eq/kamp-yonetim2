@@ -21,12 +21,19 @@ export async function POST(request: Request) {
       );
     }
 
+    console.log('MongoDB bağlantısı kuruluyor...');
     const client = await clientPromise;
+    console.log('MongoDB bağlantısı başarılı');
+
     const db = client.db('kamp-yonetim');
+    console.log('Veritabanı seçildi:', db.databaseName);
 
     // E-posta adresi kontrolü
+    console.log('E-posta kontrolü yapılıyor:', email);
     const existingUser = await db.collection('users').findOne({ email });
+    
     if (existingUser) {
+      console.log('E-posta adresi zaten kullanımda');
       return NextResponse.json(
         { error: 'Bu e-posta adresi zaten kullanılıyor' },
         { status: 400 }
@@ -41,13 +48,23 @@ export async function POST(request: Request) {
       createdAt: new Date().toISOString()
     };
 
-    await db.collection('users').insertOne(newUser);
+    console.log('Yeni kullanıcı ekleniyor:', { ...newUser, password: '***' });
+    const result = await db.collection('users').insertOne(newUser);
+    console.log('Kullanıcı eklendi, ID:', result.insertedId);
 
-    return NextResponse.json({ success: true }, { status: 201 });
+    return NextResponse.json({ 
+      success: true,
+      message: 'Kullanıcı başarıyla oluşturuldu',
+      userId: result.insertedId.toString()
+    }, { status: 201 });
   } catch (error) {
-    console.error('Kayıt hatası:', error);
+    console.error('Kayıt hatası detayı:', error);
+    // Hata detayını da döndür
     return NextResponse.json(
-      { error: 'Kayıt sırasında bir hata oluştu' },
+      { 
+        error: 'Kayıt sırasında bir hata oluştu',
+        details: error instanceof Error ? error.message : 'Bilinmeyen hata'
+      },
       { status: 500 }
     );
   }
